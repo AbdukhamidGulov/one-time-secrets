@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  app:
+    build: . # Build the image from the Dockerfile in the current directory
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000
+    depends_on:
+      db:
+        condition: service_healthy # Wait for db to be ready (Postgres >= 12)
+      redis:
+        condition: service_started # Redis starts fast, service_started is often enough
+    env_file:
+      - .env # Load environment variables from .env file
+    environment:
+      # Ensure ENCRYPTION_KEY is set, either here or in .env
+      # Example: ENCRYPTION_KEY: '_YqOr9f-e1OrJzZg_QDzsiKIJtW93d5zO5iMS8Hk8Vg=' # REPLACE THIS!
+      # Database connection details (can be overridden by .env)
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-secrets_db} # Use env var or default
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      # Redis connection details (can be overridden by .env)
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    networks:
+      - secrets_network
+
+  db:
+    image: postgres:15-alpine # Use a specific PostgreSQL version
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/ # Persist data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-secrets_db}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432:5432" # Optional: map host port for direct DB access if needed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-secrets_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - secrets_network
+
+  redis:
+    image: redis:7-alpine # Use a specific Redis version
+    volumes:
+      - redis_data:/data # Persist cache data (optional)
+    # ports: # Optional: expose Redis port if needed externally
+    #   - "6379:6379"
+    networks:
+      - secrets_network
+
+volumes:
+  postgres_data:
+  redis_data: # Define the volume for Redis persistence
+
+networks:
+  secrets_network:
+    driver: bridge
